@@ -1,0 +1,481 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Batería Social</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-family: 'Inter', sans-serif;
+            background: linear-gradient(135deg, #0f0c29 0%, #302b63 50%, #24243e 100%);
+            overflow: hidden;
+        }
+
+        /* Animated background orbs */
+        body::before,
+        body::after {
+            content: '';
+            position: fixed;
+            border-radius: 50%;
+            filter: blur(120px);
+            opacity: 0.3;
+            z-index: 0;
+            animation: floatOrb 8s ease-in-out infinite alternate;
+        }
+        body::before {
+            width: 500px;
+            height: 500px;
+            background: #7c3aed;
+            top: -100px;
+            left: -100px;
+        }
+        body::after {
+            width: 400px;
+            height: 400px;
+            background: #06b6d4;
+            bottom: -80px;
+            right: -80px;
+            animation-delay: 4s;
+        }
+
+        @keyframes floatOrb {
+            0% { transform: translate(0, 0) scale(1); }
+            100% { transform: translate(60px, 40px) scale(1.15); }
+        }
+
+        .card {
+            position: relative;
+            z-index: 1;
+            background: rgba(255, 255, 255, 0.05);
+            backdrop-filter: blur(24px);
+            -webkit-backdrop-filter: blur(24px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 28px;
+            padding: 48px 40px 40px;
+            width: 520px;
+            max-width: 95vw;
+            box-shadow:
+                0 8px 32px rgba(0, 0, 0, 0.4),
+                inset 0 1px 0 rgba(255, 255, 255, 0.08);
+            text-align: center;
+        }
+
+        .card-title {
+            font-size: 14px;
+            font-weight: 600;
+            letter-spacing: 3px;
+            text-transform: uppercase;
+            color: rgba(255, 255, 255, 0.45);
+            margin-bottom: 8px;
+        }
+
+        .card-heading {
+            font-size: 28px;
+            font-weight: 800;
+            color: #fff;
+            margin-bottom: 6px;
+            background: linear-gradient(135deg, #e0e7ff, #c4b5fd, #a78bfa);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .card-subtitle {
+            font-size: 13px;
+            color: rgba(255, 255, 255, 0.35);
+            margin-bottom: 36px;
+        }
+
+        /* Canvas slider container */
+        .slider-container {
+            position: relative;
+            width: 100%;
+            height: 72px;
+            margin-bottom: 32px;
+            cursor: pointer;
+            touch-action: none;
+        }
+
+        #sliderCanvas {
+            display: block;
+            width: 100%;
+            height: 72px;
+            border-radius: 36px;
+        }
+
+        /* Status label */
+        .status-section {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 14px;
+            margin-bottom: 24px;
+        }
+
+        .status-emoji {
+            font-size: 48px;
+            line-height: 1;
+            transition: transform 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
+        }
+
+        .status-emoji.pop {
+            transform: scale(1.25);
+        }
+
+        .status-text-group {
+            text-align: left;
+        }
+
+        .status-label {
+            font-size: 22px;
+            font-weight: 700;
+            color: #fff;
+            transition: color 0.4s ease;
+        }
+
+        .status-description {
+            font-size: 12px;
+            color: rgba(255, 255, 255, 0.4);
+            margin-top: 2px;
+        }
+
+        /* Percentage bar */
+        .percentage-bar {
+            position: relative;
+            width: 100%;
+            height: 6px;
+            background: rgba(255, 255, 255, 0.07);
+            border-radius: 3px;
+            overflow: hidden;
+            margin-bottom: 12px;
+        }
+
+        .percentage-fill {
+            height: 100%;
+            border-radius: 3px;
+            transition: width 0.5s cubic-bezier(0.34, 1.56, 0.64, 1),
+                        background 0.4s ease;
+            width: 0%;
+        }
+
+        .percentage-value {
+            font-size: 13px;
+            font-weight: 600;
+            color: rgba(255, 255, 255, 0.5);
+            text-align: right;
+        }
+
+        /* Tick marks labels */
+        .tick-labels {
+            display: flex;
+            justify-content: space-between;
+            padding: 0 8px;
+            margin-top: 8px;
+        }
+
+        .tick-labels span {
+            font-size: 10px;
+            color: rgba(255, 255, 255, 0.2);
+            font-weight: 600;
+            letter-spacing: 0.5px;
+        }
+    </style>
+</head>
+<body>
+
+<div class="card">
+    <p class="card-title">Social Battery</p>
+    <h1 class="card-heading">¿Cómo te sientes hoy?</h1>
+    <p class="card-subtitle">Desliza para indicar tu nivel de energía social</p>
+
+    <!-- Canvas-based slider -->
+    <div class="slider-container" id="sliderContainer">
+        <canvas id="sliderCanvas"></canvas>
+    </div>
+    <div class="tick-labels">
+        <span>Agotado</span>
+        <span>Bajo</span>
+        <span>Neutro</span>
+        <span>Bien</span>
+        <span>Genial</span>
+        <span>¡Al máx!</span>
+    </div>
+
+    <!-- Status display -->
+    <div class="status-section">
+        <div class="status-emoji" id="statusEmoji">😞</div>
+        <div class="status-text-group">
+            <div class="status-label" id="statusLabel">Agotado</div>
+            <div class="status-description" id="statusDesc">Necesito tiempo a solas</div>
+        </div>
+    </div>
+
+    <!-- Percentage bar -->
+    <div class="percentage-bar">
+        <div class="percentage-fill" id="percentFill"></div>
+    </div>
+    <div class="percentage-value" id="percentValue">0%</div>
+</div>
+
+<script>
+(function () {
+    // ── Configuration ──
+    const LEVELS = [
+        { emoji: '😞', label: 'Agotado',   desc: 'Necesito tiempo a solas',      color: '#ef4444', gradient: ['#dc2626', '#ef4444'] },
+        { emoji: '🙁', label: 'Bajo',      desc: 'Prefiero estar tranquilo',     color: '#f97316', gradient: ['#ea580c', '#f97316'] },
+        { emoji: '😐', label: 'Neutro',    desc: 'Estoy bien, sin más',          color: '#eab308', gradient: ['#ca8a04', '#eab308'] },
+        { emoji: '🙂', label: 'Bien',      desc: 'Puedo socializar un rato',     color: '#22c55e', gradient: ['#16a34a', '#22c55e'] },
+        { emoji: '😊', label: 'Genial',    desc: '¡Me encanta la compañía!',     color: '#3b82f6', gradient: ['#2563eb', '#3b82f6'] },
+        { emoji: '😁', label: '¡Al máximo!', desc: '¡Energía social al 100%!', color: '#8b5cf6', gradient: ['#7c3aed', '#8b5cf6'] },
+    ];
+
+    const FACE_EMOJIS = ['😞', '🙁', '😐', '🙂', '😊', '😁'];
+    const SEGMENTS = LEVELS.length;
+
+    // ── DOM refs ──
+    const container = document.getElementById('sliderContainer');
+    const canvas    = document.getElementById('sliderCanvas');
+    const ctx       = canvas.getContext('2d');
+    const statusEmoji = document.getElementById('statusEmoji');
+    const statusLabel = document.getElementById('statusLabel');
+    const statusDesc  = document.getElementById('statusDesc');
+    const percentFill = document.getElementById('percentFill');
+    const percentValue = document.getElementById('percentValue');
+
+    // ── State ──
+    let currentLevel = 0;
+    let animatedLevel = 0;       // smooth animated value
+    let targetLevel = 0;
+    let isDragging = false;
+    let dpr = window.devicePixelRatio || 1;
+
+    // ── Canvas sizing ──
+    function resizeCanvas() {
+        const rect = container.getBoundingClientRect();
+        canvas.width  = rect.width * dpr;
+        canvas.height = rect.height * dpr;
+        canvas.style.width  = rect.width + 'px';
+        canvas.style.height = rect.height + 'px';
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    }
+
+    // ── Drawing ──
+    function draw() {
+        const w = canvas.width / dpr;
+        const h = canvas.height / dpr;
+        const radius = h / 2;
+        const padding = 8;
+        const innerH = h - padding * 2;
+        const innerRadius = innerH / 2;
+
+        ctx.clearRect(0, 0, w, h);
+
+        // Track background
+        ctx.save();
+        ctx.beginPath();
+        roundedRect(ctx, 0, 0, w, h, radius);
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.06)';
+        ctx.fill();
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.08)';
+        ctx.lineWidth = 1;
+        ctx.stroke();
+        ctx.restore();
+
+        // Filled portion
+        const fillRatio = animatedLevel / (SEGMENTS - 1);
+        const fillWidth = Math.max(h, padding * 2 + innerH + (w - padding * 2 - innerH) * fillRatio);
+
+        ctx.save();
+        ctx.beginPath();
+        roundedRect(ctx, 0, 0, fillWidth, h, radius);
+        ctx.clip();
+
+        // Gradient fill
+        const level = LEVELS[Math.round(animatedLevel)];
+        const grd = ctx.createLinearGradient(0, 0, fillWidth, 0);
+        grd.addColorStop(0, level.gradient[0]);
+        grd.addColorStop(1, level.gradient[1]);
+        ctx.fillStyle = grd;
+        ctx.beginPath();
+        roundedRect(ctx, 0, 0, w, h, radius);
+        ctx.fill();
+        ctx.restore();
+
+        // Glow on fill
+        ctx.save();
+        ctx.shadowColor = level.color;
+        ctx.shadowBlur = 20;
+        ctx.beginPath();
+        roundedRect(ctx, 0, 0, fillWidth, h, radius);
+        ctx.fillStyle = 'rgba(0,0,0,0)';
+        ctx.fill();
+        ctx.restore();
+
+        // Segment separators & face emojis
+        const usableWidth = w - padding * 2 - innerH;
+        for (let i = 0; i < SEGMENTS; i++) {
+            const cx = padding + innerRadius + (usableWidth * i) / (SEGMENTS - 1);
+            const cy = h / 2;
+
+            // Separator tick (except first and last)
+            if (i > 0 && i < SEGMENTS) {
+                ctx.save();
+                ctx.beginPath();
+                ctx.moveTo(cx, padding + 4);
+                ctx.lineTo(cx, h - padding - 4);
+                ctx.strokeStyle = 'rgba(255,255,255,0.07)';
+                ctx.lineWidth = 1;
+                ctx.stroke();
+                ctx.restore();
+            }
+
+            // Emoji face inside track
+            const isActive = i <= Math.round(animatedLevel);
+            const isCurrent = i === Math.round(animatedLevel);
+            const emojiSize = isCurrent ? 30 : (isActive ? 22 : 20);
+            const alpha = isActive ? 1 : 0.35;
+
+            ctx.save();
+            ctx.globalAlpha = alpha;
+            ctx.font = `${emojiSize}px "Segoe UI Emoji", "Apple Color Emoji", "Noto Color Emoji", sans-serif`;
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(FACE_EMOJIS[i], cx, cy + 1);
+            ctx.restore();
+        }
+
+        // Thumb / handle
+        const thumbX = padding + innerRadius + (usableWidth * animatedLevel) / (SEGMENTS - 1);
+        const thumbY = h / 2;
+        const thumbR = innerRadius + 2;
+
+        // Outer ring glow
+        ctx.save();
+        ctx.beginPath();
+        ctx.arc(thumbX, thumbY, thumbR + 4, 0, Math.PI * 2);
+        ctx.fillStyle = level.color + '30';
+        ctx.fill();
+        ctx.restore();
+
+        // Thumb ring
+        ctx.save();
+        ctx.beginPath();
+        ctx.arc(thumbX, thumbY, thumbR, 0, Math.PI * 2);
+        ctx.strokeStyle = '#fff';
+        ctx.lineWidth = 3;
+        ctx.shadowColor = 'rgba(0,0,0,0.4)';
+        ctx.shadowBlur = 10;
+        ctx.stroke();
+        ctx.restore();
+    }
+
+    function roundedRect(ctx, x, y, w, h, r) {
+        ctx.moveTo(x + r, y);
+        ctx.lineTo(x + w - r, y);
+        ctx.arcTo(x + w, y, x + w, y + r, r);
+        ctx.lineTo(x + w, y + h - r);
+        ctx.arcTo(x + w, y + h, x + w - r, y + h, r);
+        ctx.lineTo(x + r, y + h);
+        ctx.arcTo(x, y + h, x, y + h - r, r);
+        ctx.lineTo(x, y + r);
+        ctx.arcTo(x, y, x + r, y, r);
+        ctx.closePath();
+    }
+
+    // ── Interaction ──
+    function getLevelFromX(clientX) {
+        const rect = container.getBoundingClientRect();
+        const w = rect.width;
+        const h = rect.height;
+        const padding = 8;
+        const innerH = h - padding * 2;
+        const innerRadius = innerH / 2;
+        const usableWidth = w - padding * 2 - innerH;
+        const relX = clientX - rect.left - padding - innerRadius;
+        const ratio = Math.max(0, Math.min(1, relX / usableWidth));
+        return Math.round(ratio * (SEGMENTS - 1));
+    }
+
+    function updateLevel(level) {
+        if (level === currentLevel) return;
+        currentLevel = level;
+        targetLevel = level;
+
+        const data = LEVELS[level];
+
+        // Animate emoji pop
+        statusEmoji.classList.remove('pop');
+        void statusEmoji.offsetWidth; // reflow
+        statusEmoji.classList.add('pop');
+        statusEmoji.textContent = data.emoji;
+
+        statusLabel.textContent = data.label;
+        statusLabel.style.color = data.color;
+        statusDesc.textContent = data.desc;
+
+        const pct = Math.round((level / (SEGMENTS - 1)) * 100);
+        percentFill.style.width = pct + '%';
+        percentFill.style.background = `linear-gradient(90deg, ${data.gradient[0]}, ${data.gradient[1]})`;
+        percentValue.textContent = pct + '%';
+    }
+
+    // Mouse events
+    container.addEventListener('mousedown', (e) => {
+        isDragging = true;
+        const level = getLevelFromX(e.clientX);
+        updateLevel(level);
+    });
+    window.addEventListener('mousemove', (e) => {
+        if (!isDragging) return;
+        const level = getLevelFromX(e.clientX);
+        updateLevel(level);
+    });
+    window.addEventListener('mouseup', () => { isDragging = false; });
+
+    // Touch events
+    container.addEventListener('touchstart', (e) => {
+        isDragging = true;
+        const touch = e.touches[0];
+        const level = getLevelFromX(touch.clientX);
+        updateLevel(level);
+    }, { passive: true });
+    window.addEventListener('touchmove', (e) => {
+        if (!isDragging) return;
+        const touch = e.touches[0];
+        const level = getLevelFromX(touch.clientX);
+        updateLevel(level);
+    }, { passive: true });
+    window.addEventListener('touchend', () => { isDragging = false; });
+
+    // ── Animation loop ──
+    function animate() {
+        // Smooth lerp toward target
+        const speed = 0.12;
+        animatedLevel += (targetLevel - animatedLevel) * speed;
+        if (Math.abs(animatedLevel - targetLevel) < 0.005) {
+            animatedLevel = targetLevel;
+        }
+        draw();
+        requestAnimationFrame(animate);
+    }
+
+    // ── Init ──
+    resizeCanvas();
+    window.addEventListener('resize', () => { resizeCanvas(); });
+    updateLevel(0);
+    animate();
+})();
+</script>
+</body>
+</html>
