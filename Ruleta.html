@@ -1,0 +1,1404 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Ruleta</title>
+
+
+</head>
+
+<body>
+
+    <div style=" width:99%; margin: 0 auto;">
+
+
+        <div
+            style="display: grid; grid-template-columns: repeat(12, 1fr); gap: 0 20px; width: 100%; align-items: start;">
+
+            <!-- Row 1: Title spanning 10 columns -->
+            <div style="grid-column: span 10; display: flex; justify-content: center; margin-bottom: 0;">
+                <div class="turno-badge" id="turno"
+                    style="width: 100%; max-width: none; border-bottom-left-radius: 0; border-bottom-right-radius: 0;">
+                    Próximo giro <br> <span id="turnoActual">Premio</span> </div>
+            </div>
+
+
+            <!-- Row 2: Wheels (5+5) and History (2) -->
+            <div style="grid-column: span 5; display: flex; flex-direction: column; align-items: center;">
+                <div class="ruleta-card" style="min-width: 0; width: 100%;">
+                    <h2>🏆 Premio</h2>
+                    <canvas id="ruletaPremios" width="600" height="600" style="max-width: 100%; height: auto;"></canvas>
+                </div>
+                <div id="mensaje_premio"
+                    style="font-size:24px; font-weight:700; text-align:center; margin-top: 15px; min-height: 35px;">
+                </div>
+            </div>
+
+            <div style="grid-column: span 5; display: flex; flex-direction: column; align-items: center;">
+                <div class="ruleta-card" style="min-width: 0; width: 100%;">
+                    <h2>🍽️ Mesa</h2>
+                    <canvas id="ruletaMesas" width="600" height="600" style="max-width: 100%; height: auto;"></canvas>
+                </div>
+                <div id="mensaje_mesa"
+                    style="font-size:24px; font-weight:700; text-align:center; margin-top: 15px; min-height: 35px;">
+                </div>
+            </div>
+
+            <div style="grid-column: span 2;">
+                <div class="historial" style="margin-top: 0; max-width: none;">
+                    <div
+                        style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                        <h3 style="margin:0;">Premios</h3>
+                        <button onclick="exportarResultados()" class="btn-exportar-icon"
+                            title="Exportar Resultados">💾</button>
+                    </div>
+                    <div id="listaGanancias"></div>
+                </div>
+            </div>
+
+        </div>
+        <div class="status-text" style="text-align: center;">
+            <div id="mensaje"></div>
+            <div id="instruccion"></div>
+        </div>
+    </div>
+
+    </div>
+
+</body>
+
+</html>
+
+<script>
+    let audioCtx;
+    let mensaje_pre = document.getElementById("mensaje_premio");
+    let mensaje_mes = document.getElementById("mensaje_mesa");
+
+    function playBeep() {
+        if (!audioCtx) {
+            audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        }
+
+        const now = audioCtx.currentTime;
+        const duration = 0.3;
+
+        const clickBuffer = () => {
+            const sampleRate = audioCtx.sampleRate;
+            const len = Math.floor(sampleRate * 0.05);
+            const buffer = audioCtx.createBuffer(1, len, sampleRate);
+            const data = buffer.getChannelData(0);
+            for (let i = 0; i < len; i++) {
+                data[i] = (Math.random() - 0.5) * 0.4 * (1 - i / len);
+            }
+            return buffer;
+        };
+
+        const clickSource = audioCtx.createBufferSource();
+        clickSource.buffer = clickBuffer();
+        clickSource.connect(audioCtx.destination);
+        clickSource.start(now);
+
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        const filter = audioCtx.createBiquadFilter();
+
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(400, now);
+        osc.frequency.exponentialRampToValueAtTime(1200, now + duration);
+
+        filter.type = 'lowpass';
+        filter.frequency.setValueAtTime(3000, now);
+        filter.frequency.exponentialRampToValueAtTime(800, now + duration);
+
+        gain.gain.setValueAtTime(0.2, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + duration);
+
+        osc.connect(filter);
+        filter.connect(gain);
+        gain.connect(audioCtx.destination);
+
+        osc.start(now);
+        osc.stop(now + duration);
+    }
+
+    function playFanfare() {
+        if (!audioCtx) {
+            audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        }
+
+        const now = audioCtx.currentTime;
+
+        const introNotes = [392.00, 659.25, 1046.50];
+        const durations = [0.12, 0.12, 0.4];
+
+        introNotes.forEach((freq, i) => {
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            const filter = audioCtx.createBiquadFilter();
+
+            osc.type = i === 2 ? 'sawtooth' : 'triangle';
+            osc.frequency.value = freq;
+
+            filter.type = 'lowpass';
+            filter.frequency.value = i === 2 ? 3000 : 2000;
+            filter.Q.value = 5;
+
+            const startTime = now + i * 0.12;
+            gain.gain.setValueAtTime(0.0001, startTime);
+            gain.gain.exponentialRampToValueAtTime(0.15, startTime + 0.02);
+            gain.gain.exponentialRampToValueAtTime(0.0001, startTime + durations[i]);
+
+            osc.connect(filter);
+            filter.connect(gain);
+            gain.connect(audioCtx.destination);
+
+            osc.start(startTime);
+            osc.stop(startTime + durations[i] + 0.05);
+        });
+
+        const chordNotes = [523.25, 659.25, 783.99];
+        const chordStart = now + 0.3;
+        const chordDuration = 1.2;
+
+        chordNotes.forEach(freq => {
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            const filter = audioCtx.createBiquadFilter();
+
+            osc.type = 'sine';
+            osc.frequency.value = freq;
+
+            filter.type = 'lowpass';
+            filter.frequency.setValueAtTime(800, chordStart);
+            filter.frequency.exponentialRampToValueAtTime(2500, chordStart + 0.3);
+
+            gain.gain.setValueAtTime(0.0001, chordStart);
+            gain.gain.exponentialRampToValueAtTime(0.1, chordStart + 0.05);
+            gain.gain.exponentialRampToValueAtTime(0.0001, chordStart + chordDuration);
+
+            osc.connect(filter);
+            filter.connect(gain);
+            gain.connect(audioCtx.destination);
+
+            osc.start(chordStart);
+            osc.stop(chordStart + chordDuration);
+        });
+
+        const dingFreq = 1046.50;
+        const dingOsc = audioCtx.createOscillator();
+        const dingGain = audioCtx.createGain();
+        dingOsc.type = 'sine';
+        dingOsc.frequency.value = dingFreq;
+        dingGain.gain.setValueAtTime(0.0001, chordStart);
+        dingGain.gain.exponentialRampToValueAtTime(0.12, chordStart + 0.02);
+        dingGain.gain.exponentialRampToValueAtTime(0.0001, chordStart + 0.25);
+        dingOsc.connect(dingGain);
+        dingGain.connect(audioCtx.destination);
+        dingOsc.start(chordStart);
+        dingOsc.stop(chordStart + 0.3);
+    }
+
+    function playDrum() {
+
+        if (!audioCtx) {
+            audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        }
+
+        const now = audioCtx.currentTime;
+
+
+        // ===== CUERPO RESONANTE (madera) =====
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = 'sine';          // más puro y "de madera" que triangle
+        osc.frequency.setValueAtTime(240, now);
+        osc.frequency.exponentialRampToValueAtTime(200, now + 0.08); // barrido suave
+        gain.gain.setValueAtTime(0.35, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.1);
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.start(now);
+        osc.stop(now + 0.1);
+
+        // ===== ATAQUE SECO (golpe de madera) =====
+        // En lugar de un oscilador cuadrado (demasiado eléctrico), usamos RUIDO BLANCO FILTRADO
+        const bufferSize = 2048;
+        const noise = audioCtx.createBufferSource();
+        const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
+        const data = buffer.getChannelData(0);
+        for (let i = 0; i < bufferSize; i++) data[i] = Math.random() * 2 - 1;
+        noise.buffer = buffer;
+        noise.loop = false;
+
+        const filter = audioCtx.createBiquadFilter();
+        filter.type = 'bandpass';
+        filter.frequency.value = 1800;   // frecuencias medias-altas para el "golpe seco"
+        filter.Q.value = 1.8;
+
+        const noiseGain = audioCtx.createGain();
+        noiseGain.gain.setValueAtTime(0.28, now);
+        noiseGain.gain.exponentialRampToValueAtTime(0.001, now + 0.035);
+
+        noise.connect(filter);
+        filter.connect(noiseGain);
+        noiseGain.connect(audioCtx.destination);
+        noise.start(now);
+        noise.stop(now + 0.035);
+    }
+
+
+
+
+
+
+
+    function mezclarArray(arr) {
+        for (let i = arr.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [arr[i], arr[j]] = [arr[j], arr[i]];
+        }
+    }
+
+    const premiosIniciales_ = [
+        'Kindle',
+        'Kindle',
+        'Kindle',
+        'Kindle',
+        'Tablet',
+        'Tablet',
+        'Tablet',
+        'Vale tienda Ibero',
+        'Vale tienda Ibero',
+        'Vale tienda Ibero'
+    ];
+    const premiosIniciales = [
+        'Kindle',
+        'Kindle',
+        'Kindle',
+        'Kindle',
+        'Kindle',
+        'Kindle',
+        'Kindle',
+        'Kindle',
+        'Kindle',
+        'Kindle',
+        'Tablet',
+        'Tablet',
+        'Tablet',
+        'Tablet',
+        'Tablet',
+        'Tablet',
+        'Tablet',
+        'Tablet',
+        'Tablet',
+        'Tablet',
+        'Vale tienda Ibero',
+        'Vale tienda Ibero',
+        'Vale tienda Ibero',
+        'Vale tienda Ibero',
+        'Vale tienda Ibero',
+        'Vale tienda Ibero',
+        'Vale tienda Ibero',
+        'Vale tienda Ibero',
+        'Vale tienda Ibero',
+        'Vale tienda Ibero',
+        'Vale tienda Ibero',
+        'Chamarra Ibero',
+        'Chamarra Ibero',
+        'Chamarra Ibero',
+        'Chamarra Ibero',
+        'Chamarra Ibero',
+        'Chamarra Ibero',
+        'Chamarra Ibero',
+        'Chamarra Ibero',
+        'Sudadera Ibero',
+        'Sudadera Ibero',
+        'Sudadera Ibero',
+        'Sudadera Ibero',
+        'Tonayan'
+    ];
+
+    const mesasIniciales = Array.from({ length: premiosIniciales.length }, (_, i) => `  ${i + 1}`);
+
+    const coloresBrillantes = [
+        '#ffffff',
+        '#f23f3f',
+        '#EC7063',
+        '#3498DB',
+        '#5DADE2',
+        '#58D68D',
+        '#4ECDC4',
+        '#76D7C4',
+        '#82E0AA',
+        '#98D8C8',
+        '#96CEB4',
+        '#BB8FCE',
+        '#F8C471',
+        '#F39C12',
+        '#D68910',
+        '#FFEAA7',
+        '#ffffff',
+        '#f23f3f',
+        '#EC7063',
+        '#3498DB',
+        '#5DADE2',
+        '#58D68D',
+        '#4ECDC4',
+        '#76D7C4',
+        '#82E0AA',
+        '#98D8C8',
+        '#96CEB4',
+        '#BB8FCE',
+        '#F8C471',
+        '#F39C12',
+        '#D68910',
+        '#FFEAA7',
+        '#ffffff',
+        '#f23f3f',
+        '#EC7063',
+        '#3498DB',
+        '#5DADE2',
+        '#58D68D',
+        '#4ECDC4',
+        '#76D7C4',
+        '#82E0AA',
+        '#98D8C8',
+        '#96CEB4',
+        '#BB8FCE',
+        '#F8C471',
+        '#F39C12',
+        '#D68910',
+        '#FFEAA7'
+    ];
+
+    const coloresMesa = [
+        '#ffffff',
+        '#f23f3f',
+        '#EC7063',
+        '#3498DB',
+        '#5DADE2',
+        '#45B7D1',
+        '#58D68D',
+        '#4ECDC4',
+        '#76D7C4',
+        '#82E0AA',
+        '#A3E4D7',
+        '#98D8C8',
+        '#A9DFBF',
+        '#FAD7A8',
+        '#F4D03F',
+        '#f23f3f',
+        '#EC7063',
+        '#3498DB',
+        '#5DADE2',
+        '#45B7D1',
+        '#58D68D',
+        '#4ECDC4',
+        '#76D7C4',
+        '#82E0AA',
+        '#A3E4D7',
+        '#98D8C8',
+        '#A9DFBF',
+        '#FAD7A8',
+        '#F4D03F',
+        '#f23f3f',
+        '#EC7063',
+        '#3498DB',
+        '#5DADE2',
+        '#45B7D1',
+        '#58D68D',
+        '#4ECDC4',
+        '#76D7C4',
+        '#82E0AA',
+        '#A3E4D7',
+        '#98D8C8',
+        '#A9DFBF',
+        '#FAD7A8',
+        '#F4D03F'
+    ];
+
+    //******************** */
+    mezclarArray(premiosIniciales);
+    mezclarArray(mesasIniciales);
+
+
+
+    // Array de objetos: { nombre, color }
+    let premiosColor = premiosIniciales.map((nombre, i) => ({
+        nombre,
+        color: coloresBrillantes[i % coloresBrillantes.length]
+    }));
+
+    let mesasColor = mesasIniciales.map((nombre, i) => ({
+        nombre,
+        color: coloresMesa[i % coloresMesa.length]
+    }));
+
+    let premiosDisponibles = [...premiosColor];
+    let mesasDisponibles = [...mesasColor];
+
+    mezclarArray(premiosDisponibles);
+    mezclarArray(mesasDisponibles);
+
+    let gananciasTurno = [];
+    let esTurnoPremios = true;
+
+    const canvasPremios = document.getElementById('ruletaPremios');
+    const ctxPremios = canvasPremios.getContext('2d');
+    const centerXP = canvasPremios.width / 2;
+    const centerYP = canvasPremios.height / 2;
+    const radiusP = 249;
+
+    const canvasMesas = document.getElementById('ruletaMesas');
+    const ctxMesas = canvasMesas.getContext('2d');
+    const centerXM = canvasMesas.width / 2;
+    const centerYM = canvasMesas.height / 2;
+    const radiusM = 249;
+
+    let rotacionPremios = 0, rotacionMesas = 0;
+    let girando = false;
+
+    function actualizarHistorial() {
+        const totalItems = gananciasTurno.length;
+        //document.getElementById('contadorGanancias').textContent = Math.floor(totalItems / 2);
+
+        const lista = document.getElementById('listaGanancias');
+
+        if (!totalItems) {
+            lista.innerHTML = '<div style="color:#ccc"> </div>';
+            return;
+        }
+
+        let html = '';
+        for (let i = 0; i < totalItems; i += 2) {
+            const turno = (i / 2) + 1;
+            const item1 = gananciasTurno[i] || ''; // 🏆
+            const item2 = gananciasTurno[i + 1] || ''; // 🍽️
+            html = `<div class="ganancia">Turno ${turno} <br>${item1}  ${item2} </div><hr>` + html;
+        }
+        lista.innerHTML = html;
+    }
+
+
+    function dibujarRuleta(ctx, centerX, centerY, radius, items, rotacion, canvasSize) {
+        ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+        const total = items.length;
+        const anguloSector = (2 * Math.PI) / total;
+
+        for (let i = 0; i < total; i++) {
+            const inicioAngulo = i * anguloSector + rotacion;
+            const item = items[i]; // { nombre, color }
+
+            ctx.beginPath();
+            ctx.moveTo(centerX, centerY);
+            ctx.arc(centerX, centerY, radius, inicioAngulo, inicioAngulo + anguloSector);
+            ctx.closePath();
+
+            ctx.fillStyle = item.color;
+            ctx.fill();
+            ctx.strokeStyle = '#57636e';
+            ctx.lineWidth = 3;
+            ctx.stroke();
+
+            ctx.save();
+            ctx.translate(centerX, centerY);
+            ctx.rotate(inicioAngulo + anguloSector / 2);
+            ctx.textAlign = 'right';
+
+            ctx.fillStyle = '#043f66';
+            ctx.font = 'bold 14px Arial';
+            ctx.shadowColor = '#ffffff';
+            ctx.shadowBlur = 10;
+            ctx.shadowOffsetX = 0;
+            ctx.shadowOffsetY = 0;
+
+            const texto = item.nombre.slice(0, 30);
+            ctx.fillText(texto, radius - 25, 8);
+
+            ctx.restore();
+        }
+
+        ctx.save();
+        ctx.translate(centerX, centerY - radius);
+        ctx.rotate(Math.PI);
+        ctx.beginPath();
+        ctx.moveTo(0, 0);
+        ctx.lineTo(12, 22);
+        ctx.lineTo(-12, 22);
+        ctx.closePath();
+        ctx.fillStyle = '#FFD700';
+        ctx.shadowColor = '#ffffff';
+        ctx.shadowBlur = 1;
+        ctx.fill();
+        ctx.strokeStyle = '#FFD000';
+        ctx.lineWidth = 3;
+        ctx.stroke();
+        ctx.restore();
+    }
+
+    function girar() {
+        if (girando || (premiosDisponibles.length === 0 && mesasDisponibles.length === 0)) {
+            mensaje_pre.innerHTML = '';
+            mensaje_mes.innerHTML = '';
+            return;
+        }
+        girando = true;
+
+        let velocidad = 0.28;
+        let frame = 0;
+        const duracion = 3000 + Math.floor(Math.random() * 2001);
+
+        const itemsActuales = esTurnoPremios ? premiosDisponibles : mesasDisponibles;
+        let ultimoSectorCalculado = -1;
+
+        playBeep();
+        if (esTurnoPremios) {
+            mensaje_pre.innerHTML = '';
+            mensaje_mes.innerHTML = '';
+        }
+
+        //******************************************* */
+        //**************** Animar *************** */
+        //******************************************* */
+        function animar() {
+            frame++;
+            if (esTurnoPremios) rotacionPremios += velocidad;
+            else rotacionMesas += velocidad;
+            velocidad *= 0.97;
+            let tamano_canvas = 600;
+
+            // Lógica de sonido por sector
+            const total = itemsActuales.length;
+            const anguloSector = (2 * Math.PI) / total;
+            const rotacionActual = esTurnoPremios ? rotacionPremios : rotacionMesas;
+            let anguloBajoFlecha = (-Math.PI / 2 - rotacionActual);
+            anguloBajoFlecha = (anguloBajoFlecha % (2 * Math.PI) + 2 * Math.PI) % (2 * Math.PI);
+            const sectorActual = Math.floor(anguloBajoFlecha / anguloSector);
+
+            if (sectorActual !== ultimoSectorCalculado) {
+                playDrum();
+                ultimoSectorCalculado = sectorActual;
+            }
+
+            dibujarRuleta(ctxPremios, centerXP, centerYP, radiusP, premiosDisponibles, rotacionPremios, tamano_canvas);
+            dibujarRuleta(ctxMesas, centerXM, centerYM, radiusM, mesasDisponibles, rotacionMesas, tamano_canvas);
+
+            if (frame * 16 < duracion) {
+                requestAnimationFrame(animar);
+            } else {
+                const total = itemsActuales.length;
+                const anguloSector = (2 * Math.PI) / total;
+                const rotacion = esTurnoPremios ? rotacionPremios : rotacionMesas;
+
+                const ANGULO_FLECHA = -Math.PI / 2;
+                let anguloBajoFlecha = ANGULO_FLECHA - rotacion;
+                anguloBajoFlecha = (anguloBajoFlecha % (2 * Math.PI) + 2 * Math.PI) % (2 * Math.PI);
+
+                const sectorFinal = Math.floor(anguloBajoFlecha / anguloSector);
+                const itemGanado = itemsActuales[sectorFinal]; // { nombre, color }
+
+                // Elegir contexto/canvas de la ruleta actual
+                const ctxAnim = esTurnoPremios ? ctxPremios : ctxMesas;
+                const centerX = esTurnoPremios ? centerXP : centerXM;
+                const centerY = esTurnoPremios ? centerYP : centerYM;
+                const radius = esTurnoPremios ? radiusP : radiusM;
+                const rotacionG = esTurnoPremios ? rotacionPremios : rotacionMesas;
+                const canvasSize = tamano_canvas;
+
+                // Animación espectacular del sector ganador
+                playFanfare();
+                let temporalPremio = null;
+                animarGanador(ctxAnim, centerX, centerY, radius, itemsActuales, sectorFinal, rotacionG, canvasSize, () => {
+                    // Cuando termina la animación, ahora sí registramos y eliminamos
+                    gananciasTurno.push(`${esTurnoPremios ? '🏆 ' : '🍽️ '}${itemGanado.nombre}`);
+                    itemsActuales.splice(sectorFinal, 1);
+
+                    if (esTurnoPremios) rotacionPremios = 0;
+                    else rotacionMesas = 0;
+
+                    if (esTurnoPremios) {
+                        mensaje_pre.innerHTML = '';
+                        mensaje_mes.innerHTML = '';
+                        mensaje_pre.innerHTML = `🏆 <h2>${itemGanado.nombre}</h2>`;
+                        temporalPremio = itemGanado.nombre;
+
+                    } else {
+                        mensaje_mes.innerHTML = `🍽️ <h2>${itemGanado.nombre}</h2>`;
+                        actualizarHistorial();
+                    }
+
+                    document.getElementById('turnoActual').textContent = esTurnoPremios ? 'MESA' : 'PREMIO';
+                    esTurnoPremios = !esTurnoPremios;
+
+
+
+                    setTimeout(() => {
+                        girando = false;
+                        dibujarRuleta(ctxPremios, centerXP, centerYP, radiusP, premiosDisponibles, 0, tamano_canvas);
+                        dibujarRuleta(ctxMesas, centerXM, centerYM, radiusM, mesasDisponibles, 0, tamano_canvas);
+                    }, 400);
+                });
+            }
+        }
+
+
+
+
+        animar();
+    }
+
+
+    //********************************************* */
+    //************* Animacion *************** */
+    //********************************************* */
+    function easeOutQuad(t) {
+        return t * (2 - t); // t entre 0 y 1
+    }
+
+    function easeOutBack(t) {
+        const c1 = 1.70158;
+        const c3 = c1 + 1;
+        return 1 + c3 * Math.pow(t - 1, 3) + c1 * Math.pow(t - 1, 2);
+    }
+    //************************************************************************** */
+    function animarGanador__(ctx, centerX, centerY, radius, items, indiceGanador, rotacion, canvasSize, callback) {
+        const total = items.length;
+        const anguloSector = (2 * Math.PI) / total;
+        const duracionAnim = 900; // un poco más larga para apreciar todo
+        const inicio = performance.now();
+
+        const inicioAnguloGanador = indiceGanador * anguloSector + rotacion;
+        const finAnguloGanador = inicioAnguloGanador + anguloSector;
+
+        const particulas = crearParticulasCasino(
+            centerX,
+            centerY,
+            radius,
+            inicioAnguloGanador,
+            finAnguloGanador,
+            55
+        );
+
+        function frameAnim(tAhora) {
+            const t = (tAhora - inicio) / duracionAnim;
+            if (t >= 1) {
+                callback && callback();
+                return;
+            }
+
+            const tClamped = Math.min(Math.max(t, 0), 1);
+            const fZoom = easeOutBack(tClamped);        // zoom con rebote ligero
+            const fHalo = easeOutQuad(1 - tClamped);
+            const fFlash = Math.sin(Math.PI * tClamped); // pico en medio
+
+            const escalaExtra = 1 + 0.22 * fZoom;       // zoom 22% máx
+            const haloAlpha = 0.9 * fHalo;
+            const flashAlpha = 0.7 * fFlash;
+
+            // ligero temblor de cámara tipo “casino”
+            const shakeIntensity = (1 - tClamped) * 3;
+            const shakeX = (Math.random() - 0.5) * shakeIntensity;
+            const shakeY = (Math.random() - 0.5) * shakeIntensity;
+
+            ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+            ctx.save();
+            ctx.translate(shakeX, shakeY);
+
+            const angSector = (2 * Math.PI) / total;
+            for (let i = 0; i < total; i++) {
+                const item = items[i];
+                const inicioAngulo = i * angSector + rotacion;
+                const finAngulo = inicioAngulo + angSector;
+                const esGanador = (i === indiceGanador);
+                const rUsado = esGanador ? radius * escalaExtra : radius;
+
+                ctx.beginPath();
+                ctx.moveTo(centerX, centerY);
+                ctx.arc(centerX, centerY, rUsado, inicioAngulo, finAngulo);
+                ctx.closePath();
+
+                if (esGanador) {
+                    // sector ganador más brillante
+                    ctx.fillStyle = item.color;
+                    ctx.fill();
+                    ctx.save();
+                    ctx.globalAlpha = 0.25 * fFlash;
+                    ctx.fillStyle = '#ffffff';
+                    ctx.fill();
+                    ctx.restore();
+                } else {
+                    ctx.fillStyle = item.color;
+                    ctx.fill();
+                }
+
+                ctx.strokeStyle = '#2c3e50';
+                ctx.lineWidth = esGanador ? 4 : 3;
+                ctx.stroke();
+
+                if (esGanador && haloAlpha > 0) {
+                    ctx.save();
+                    ctx.globalAlpha = haloAlpha;
+                    ctx.lineWidth = 8;
+                    ctx.strokeStyle = '#FFD700';
+                    ctx.beginPath();
+                    ctx.arc(centerX, centerY, rUsado + 8, inicioAngulo, finAngulo);
+                    ctx.stroke();
+                    ctx.restore();
+                }
+
+                ctx.save();
+                ctx.translate(centerX, centerY);
+                ctx.rotate(inicioAngulo + angSector / 2);
+                ctx.textAlign = esGanador ? 'center' : 'right';
+                ctx.fillStyle = esGanador ? '#ffffff' : '#043f66';
+                ctx.font = esGanador ? 'bold 18px Arial' : 'bold 14px Arial';
+                ctx.shadowColor = esGanador ? '#FFD700' : '#ffffff';
+                ctx.shadowBlur = esGanador ? 22 : 10;
+                ctx.shadowOffsetX = 0;
+                ctx.shadowOffsetY = 0;
+
+                const texto = item.nombre.slice(0, 30);
+                const offsetX = esGanador ? radius - 5 : radius - 25;
+                ctx.fillText(texto, offsetX, 8);
+                ctx.restore();
+            }
+
+            // flash radial dorado tipo jackpot
+            if (flashAlpha > 0) {
+                const grad = ctx.createRadialGradient(
+                    centerX, centerY, 5,
+                    centerX, centerY, radius * 1.3
+                );
+                grad.addColorStop(0, `rgba(255,215,0,${flashAlpha})`);
+                grad.addColorStop(0.4, `rgba(255,255,255,${flashAlpha * 0.6})`);
+                grad.addColorStop(1, 'rgba(255,215,0,0)');
+                ctx.save();
+                ctx.globalCompositeOperation = 'lighter';
+                ctx.fillStyle = grad;
+                ctx.fillRect(centerX - radius - 50, centerY - radius - 50, (radius + 50) * 2, (radius + 50) * 2);
+                ctx.restore();
+            }
+
+            // confeti / chispas
+            ctx.save();
+            particulas.forEach((p) => {
+                p.x += p.dx;
+                p.y += p.dy;
+                p.dy += 0.08;
+                p.alpha -= 0.02;
+
+                if (p.alpha <= 0) return;
+
+                ctx.globalAlpha = p.alpha;
+                ctx.beginPath();
+                ctx.fillStyle = p.color;
+                ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+                ctx.fill();
+            });
+            ctx.restore();
+
+            // flecha
+            ctx.save();
+            ctx.translate(centerX, centerY - radius);
+            ctx.rotate(Math.PI);
+            ctx.beginPath();
+            ctx.moveTo(0, 0);
+            ctx.lineTo(12, 22);
+            ctx.lineTo(-12, 22);
+            ctx.closePath();
+            ctx.fillStyle = '#FFD700';
+            ctx.shadowColor = '#FFD700';
+            ctx.shadowBlur = 12;
+            ctx.fill();
+            ctx.strokeStyle = '#B7950B';
+            ctx.lineWidth = 3;
+            ctx.stroke();
+            ctx.restore();
+
+            ctx.restore(); // quitar shake
+            requestAnimationFrame(frameAnim);
+        }
+
+        requestAnimationFrame(frameAnim);
+    }
+
+    function animarGanador(ctx, centerX, centerY, radius, items, indiceGanador, rotacion, canvasSize, callback) {
+        const total = items.length;
+        const anguloSector = (2 * Math.PI) / total;
+        const duracionAnim = 900;
+        const inicio = performance.now();
+
+        const inicioAnguloGanador = indiceGanador * anguloSector + rotacion;
+        const finAnguloGanador = inicioAnguloGanador + anguloSector;
+
+        const particulas = crearParticulasCasino(
+            centerX,
+            centerY,
+            radius,
+            inicioAnguloGanador,
+            finAnguloGanador,
+            55
+        );
+
+        function frameAnim(tAhora) {
+            const t = (tAhora - inicio) / duracionAnim;
+            if (t >= 1) {
+                callback && callback();
+                return;
+            }
+
+            const tClamped = Math.min(Math.max(t, 0), 1);
+            const fZoom = easeOutBack(tClamped);
+            const fHalo = easeOutQuad(1 - tClamped);
+            const fFlash = Math.sin(Math.PI * tClamped);
+
+            const escalaExtra = 1 + 0.22 * fZoom;
+            const haloAlpha = 0.9 * fHalo;
+            const flashAlpha = 0.7 * fFlash;
+
+            const shakeIntensity = (1 - tClamped) * 3;
+            const shakeX = (Math.random() - 0.5) * shakeIntensity;
+            const shakeY = (Math.random() - 0.5) * shakeIntensity;
+
+            ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+            ctx.save();
+            ctx.translate(shakeX, shakeY);
+
+            const angSector = (2 * Math.PI) / total;
+            for (let i = 0; i < total; i++) {
+                const item = items[i];
+                const inicioAngulo = i * angSector + rotacion;
+                const finAngulo = inicioAngulo + angSector;
+                const esGanador = (i === indiceGanador);
+                const rUsado = esGanador ? radius * escalaExtra : radius;
+
+                ctx.beginPath();
+                ctx.moveTo(centerX, centerY);
+                ctx.arc(centerX, centerY, rUsado, inicioAngulo, finAngulo);
+                ctx.closePath();
+
+                if (esGanador) {
+                    ctx.fillStyle = item.color;
+                    ctx.fill();
+                    ctx.save();
+                    ctx.globalAlpha = 0.25 * fFlash;
+                    ctx.fillStyle = '#ffffff';
+                    ctx.fill();
+                    ctx.restore();
+                } else {
+                    ctx.fillStyle = item.color;
+                    ctx.fill();
+                }
+
+                ctx.strokeStyle = '#2c3e50';
+                ctx.lineWidth = esGanador ? 4 : 3;
+                ctx.stroke();
+
+                if (esGanador && haloAlpha > 0) {
+                    ctx.save();
+                    ctx.globalAlpha = haloAlpha;
+                    ctx.lineWidth = 8;
+                    ctx.strokeStyle = '#ffffff';
+                    ctx.beginPath();
+                    ctx.arc(centerX, centerY, rUsado + 8, inicioAngulo, finAngulo);
+                    ctx.stroke();
+                    ctx.restore();
+                }
+
+                ctx.save();
+                ctx.translate(centerX, centerY);
+                ctx.rotate(inicioAngulo + angSector / 2);
+                ctx.textAlign = esGanador ? 'center' : 'right';
+                ctx.fillStyle = esGanador ? '#ffffff' : '#043f66';
+                ctx.font = esGanador ? 'bold 18px Arial' : 'bold 14px Arial';
+                ctx.shadowColor = esGanador ? '#7FB3FF' : '#ffffff';
+                ctx.shadowBlur = esGanador ? 22 : 10;
+                ctx.shadowOffsetX = 0;
+                ctx.shadowOffsetY = 0;
+
+                const texto = item.nombre.slice(0, 30);
+                const offsetX = esGanador ? radius - 5 : radius - 25;
+                ctx.fillText(texto, offsetX, 8);
+                ctx.restore();
+            }
+
+            // flash radial frío (blanco/azul), sin amarillo
+            if (flashAlpha > 0) {
+                const grad = ctx.createRadialGradient(
+                    centerX, centerY, 5,
+                    centerX, centerY, radius * 1.3
+                );
+                grad.addColorStop(0, `rgba(255,255,255,${flashAlpha})`);
+                grad.addColorStop(0.4, `rgba(173,216,230,${flashAlpha * 0.7})`); // light blue
+                grad.addColorStop(1, 'rgba(255,255,255,0)');
+                ctx.save();
+                ctx.globalCompositeOperation = 'lighter';
+                ctx.fillStyle = grad;
+                ctx.fillRect(centerX - radius - 50, centerY - radius - 50, (radius + 50) * 2, (radius + 50) * 2);
+                ctx.restore();
+            }
+
+            // confeti / chispas (ya definidos en crearParticulasCasino)
+            ctx.save();
+            particulas.forEach((p) => {
+                p.x += p.dx;
+                p.y += p.dy;
+                p.dy += 0.08;
+                p.alpha -= 0.02;
+
+                if (p.alpha <= 0) return;
+
+                ctx.globalAlpha = p.alpha;
+                ctx.beginPath();
+                ctx.fillStyle = p.color; // contiene dorados, pero muy puntuales en el borde
+                ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+                ctx.fill();
+            });
+            ctx.restore();
+
+            // flecha con glow más neutro
+            ctx.save();
+            ctx.translate(centerX, centerY - radius);
+            ctx.rotate(Math.PI);
+            ctx.beginPath();
+            ctx.moveTo(0, 0);
+            ctx.lineTo(12, 22);
+            ctx.lineTo(-12, 22);
+            ctx.closePath();
+            ctx.fillStyle = '#FFFFFF';
+            ctx.shadowColor = '#7FB3FF';
+            ctx.shadowBlur = 12;
+            ctx.fill();
+            ctx.strokeStyle = '#2c3e50';
+            ctx.lineWidth = 3;
+            ctx.stroke();
+            ctx.restore();
+
+            ctx.restore();
+            requestAnimationFrame(frameAnim);
+        }
+
+        requestAnimationFrame(frameAnim);
+    }
+
+
+
+    //************************************************************************** */
+
+    function animarGanador_(ctx, centerX, centerY, radius, items, indiceGanador, rotacion, canvasSize, callback) {
+        const total = items.length;
+        const anguloSector = (2 * Math.PI) / total;
+        const duracionAnim = 700; // un poco más larga
+        const inicio = performance.now();
+
+        const inicioAnguloGanador = indiceGanador * anguloSector + rotacion;
+        const finAnguloGanador = inicioAnguloGanador + anguloSector;
+
+        const particulas = crearParticulasGanador(
+            centerX,
+            centerY,
+            radius,
+            inicioAnguloGanador,
+            finAnguloGanador,
+            35
+        );
+
+        function frameAnim(tAhora) {
+            const t = (tAhora - inicio) / duracionAnim;
+            if (t >= 1) {
+                callback && callback();
+                return;
+            }
+
+            const f = easeOutQuad(Math.min(Math.max(t, 0), 1));
+            const escalaExtra = 1 + 0.16 * f;      // zoom 16% máx
+            const haloAlpha = 0.8 * (1 - f);     // halo se va apagando
+            const flashAlpha = 0.6 * (1 - Math.abs(0.5 - f) * 2); // flash en medio
+
+            ctx.clearRect(0, 0, canvasSize, canvasSize);
+
+            const angSector = (2 * Math.PI) / total;
+            for (let i = 0; i < total; i++) {
+                const item = items[i];
+                const inicioAngulo = i * angSector + rotacion;
+                const finAngulo = inicioAngulo + angSector;
+                const esGanador = (i === indiceGanador);
+                const rUsado = esGanador ? radius * escalaExtra : radius;
+
+                // sector
+                ctx.beginPath();
+                ctx.moveTo(centerX, centerY);
+                ctx.arc(centerX, centerY, rUsado, inicioAngulo, finAngulo);
+                ctx.closePath();
+                ctx.fillStyle = item.color;
+                ctx.fill();
+                ctx.strokeStyle = '#57636e';
+                ctx.lineWidth = 3;
+                ctx.stroke();
+
+                // halo en el borde del ganador
+                if (esGanador && haloAlpha > 0) {
+                    ctx.save();
+                    ctx.globalAlpha = haloAlpha;
+                    ctx.lineWidth = 7;
+                    ctx.strokeStyle = '#ffffff';
+                    ctx.beginPath();
+                    ctx.arc(centerX, centerY, rUsado + 6, inicioAngulo, finAngulo);
+                    ctx.stroke();
+                    ctx.restore();
+                }
+
+                // texto
+                ctx.save();
+                ctx.translate(centerX, centerY);
+                ctx.rotate(inicioAngulo + angSector / 2);
+                ctx.textAlign = esGanador ? 'center' : 'right';
+                ctx.fillStyle = '#043f66';
+                ctx.font = esGanador ? 'bold 16px Arial' : 'bold 14px Arial';
+                ctx.shadowColor = '#ffffff';
+                ctx.shadowBlur = esGanador ? 18 : 10;
+                ctx.shadowOffsetX = 0;
+                ctx.shadowOffsetY = 0;
+
+                const texto = item.nombre.slice(0, 30);
+                const offsetX = esGanador ? radius - 10 : radius - 25;
+                ctx.fillText(texto, offsetX, 8);
+                ctx.restore();
+            }
+
+            // flash radial desde el centro
+            if (flashAlpha > 0) {
+                ctx.save();
+                const grad = ctx.createRadialGradient(
+                    centerX, centerY, 5,
+                    centerX, centerY, radius * 1.1
+                );
+                grad.addColorStop(0, `rgba(255,255,255,${flashAlpha})`);
+                grad.addColorStop(1, 'rgba(255,255,255,0)');
+                ctx.fillStyle = grad;
+                ctx.fillRect(centerX - radius - 20, centerY - radius - 20, (radius + 20) * 2, (radius + 20) * 2);
+                ctx.restore();
+            }
+
+            // partículas de celebración
+            ctx.save();
+            particulas.forEach((p) => {
+                p.x += p.dx;
+                p.y += p.dy;
+                p.dy += 0.05;       // ligera gravedad
+                p.alpha -= 0.02;
+
+                if (p.alpha <= 0) return;
+
+                ctx.globalAlpha = p.alpha;
+                ctx.beginPath();
+                ctx.fillStyle = '#ffffff';
+                ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+                ctx.fill();
+            });
+            ctx.restore();
+
+            // flecha
+            ctx.save();
+            ctx.translate(centerX, centerY - radius);
+            ctx.rotate(Math.PI);
+            ctx.beginPath();
+            ctx.moveTo(0, 0);
+            ctx.lineTo(12, 22);
+            ctx.lineTo(-12, 22);
+            ctx.closePath();
+            ctx.fillStyle = '#FFD700';
+            ctx.shadowColor = '#ffffff';
+            ctx.shadowBlur = 1;
+            ctx.fill();
+            ctx.strokeStyle = '#FFD000';
+            ctx.lineWidth = 3;
+            ctx.stroke();
+            ctx.restore();
+
+            requestAnimationFrame(frameAnim);
+        }
+
+        requestAnimationFrame(frameAnim);
+    }
+
+    function crearParticulasGanador(centerX, centerY, radius, inicioAngulo, finAngulo, cantidad) {
+        const particulas = [];
+        const anguloMedio = (inicioAngulo + finAngulo) / 2;
+        const baseX = centerX + Math.cos(anguloMedio) * radius;
+        const baseY = centerY + Math.sin(anguloMedio) * radius;
+
+        for (let i = 0; i < cantidad; i++) {
+            const ang = anguloMedio + (Math.random() - 0.5) * (Math.PI / 3); // dispersión
+            const speed = 2 + Math.random() * 3;
+            particulas.push({
+                x: baseX,
+                y: baseY,
+                dx: Math.cos(ang) * speed,
+                dy: Math.sin(ang) * speed,
+                r: 2 + Math.random() * 3,
+                alpha: 1
+            });
+        }
+        return particulas;
+    }
+
+    function crearParticulasCasino(centerX, centerY, radius, inicioAngulo, finAngulo, cantidad) {
+        const particulas = [];
+        const anguloMedio = (inicioAngulo + finAngulo) / 2;
+        const baseX = centerX + Math.cos(anguloMedio) * radius;
+        const baseY = centerY + Math.sin(anguloMedio) * radius;
+
+        const colores = ['#FFD700', '#FFFFFF', '#F39C12', '#E74C3C', '#1ABC9C'];
+
+        for (let i = 0; i < cantidad; i++) {
+            const ang = anguloMedio + (Math.random() - 0.5) * (Math.PI / 1.5);
+            const speed = 2 + Math.random() * 4;
+            particulas.push({
+                x: baseX,
+                y: baseY,
+                dx: Math.cos(ang) * speed,
+                dy: Math.sin(ang) * speed - 1,
+                r: 2 + Math.random() * 3,
+                alpha: 1,
+                color: colores[Math.floor(Math.random() * colores.length)]
+            });
+        }
+        return particulas;
+    }
+    //********************************************* */
+    //************* Animacion *************** */
+    //********************************************* */
+
+
+
+    function exportarResultados() {
+        if (gananciasTurno.length === 0) {
+            alert("No hay resultados para exportar.");
+            return;
+        }
+
+        let csvContent = "\uFEFF"; // UTF-8 BOM para Excel
+        csvContent += "Turno;Premio;Mesa\n";
+
+        for (let i = 0; i < gananciasTurno.length; i += 2) {
+            const turno = (i / 2) + 1;
+            const premio = (gananciasTurno[i] || "").replace('🏆 ', '').trim();
+            const mesa = (gananciasTurno[i + 1] || "").replace('🍽️ ', '').trim();
+            csvContent += `${turno};${premio};${mesa}\n`;
+        }
+
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        const link = document.createElement("a");
+        const url = URL.createObjectURL(blob);
+        link.setAttribute("href", url);
+        link.setAttribute("download", "ganadores_ruleta.csv");
+        link.style.visibility = 'hidden';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    }
+
+    //default
+    document.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !girando) girar(); });
+    canvasPremios.addEventListener('click', () => !girando && girar());
+    canvasMesas.addEventListener('click', () => !girando && girar());
+
+    actualizarHistorial();
+    dibujarRuleta(ctxPremios, centerXP, centerYP, radiusP, premiosDisponibles, 0, 650);
+    dibujarRuleta(ctxMesas, centerXM, centerYM, radiusM, mesasDisponibles, 0, 650);
+</script>
+
+<style>
+    .btn-exportar-icon {
+        background: none;
+        border: 1px solid rgba(0, 0, 0, 0.1);
+        font-size: 20px;
+        padding: 4px 8px;
+        border-radius: 8px;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background-color: #fff;
+        box-shadow: 0 2px 5px rgba(0, 0, 0, 0.05);
+    }
+
+    .btn-exportar-icon:hover {
+        background-color: #f8f9fa;
+        transform: scale(1.1);
+        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+        border-color: var(--accent);
+    }
+
+
+
+
+
+    :root {
+        --primary: #1f3b57;
+        /* azul marino */
+        --accent: #c89b3c;
+        /* dorado suave */
+        --bg-soft: #ffffff;
+        /* blanco */
+        --text-main: #222;
+    }
+
+    body {
+        background: var(--bg-soft);
+        color: var(--text-main);
+        font-family: "Segoe UI", system-ui, sans-serif;
+    }
+
+    body.skin-blue.sidebar-mini.sidebar-collapse {
+        background-color: #ffffff;
+    }
+
+    .header-main {
+        text-align: center;
+        margin-top: 20px;
+        margin-bottom: 10px;
+    }
+
+    .header-title {
+        font-size: 32px;
+        text-transform: uppercase;
+        color: var(--primary);
+        letter-spacing: 1.5px;
+        font-weight: 700;
+    }
+
+    .header-sub {
+        margin-top: 6px;
+        font-size: 15px;
+        color: #555;
+    }
+
+    .turno-badge {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 2px;
+
+        font-size: 14px;
+        text-transform: uppercase;
+        letter-spacing: 2px;
+        border-radius: 2px;
+        background: #ffffff;
+        border: 1px solid rgba(0, 0, 0, 0.1);
+        color: #666;
+        box-shadow: 0 4px 15px rgba(0, 0, 0, 0.05);
+        text-align: center;
+        width: 100%;
+        transition: all 0.3s ease;
+    }
+
+    .turno-badge span#turnoActual {
+        font-weight: 800;
+        font-size: 24px;
+        color: var(--primary);
+    }
+
+    .layout-main {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 14px;
+        margin-top: 10px;
+    }
+
+    .ruleta-container {
+        display: flex;
+        gap: 5px;
+        margin: 5px 0;
+        flex-wrap: wrap;
+        justify-content: center;
+    }
+
+    .ruleta-card {
+        position: relative;
+        padding: 14px 16px 18px;
+        border-radius: 12px;
+        background: #ffffff;
+        border: 1px solid rgba(0, 0, 0, 0.06);
+        box-shadow: 0 4px 10px rgba(0, 0, 0, 0.06);
+        min-width: 400px;
+        text-align: center;
+    }
+
+    .ruleta-card h2 {
+        margin: 0 0 10px;
+        font-size: 18px;
+        color: var(--primary);
+        font-weight: 600;
+    }
+
+    .ruleta-tag {
+        position: absolute;
+        top: -10px;
+        left: 16px;
+        padding: 2px 10px;
+        font-size: 11px;
+        border-radius: 999px;
+        background: var(--primary);
+        color: #fff;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+    }
+
+    canvas {
+        border-radius: 50%;
+        border: 2px solid rgba(0, 0, 0, 0.08);
+        background: #fafafa;
+    }
+
+    .status-text {
+        text-align: center;
+        font-size: 16px;
+        margin-top: 6px;
+        color: #333;
+    }
+
+    #mensaje {
+        font-size: 18px;
+        margin-top: 4px;
+        color: var(--primary);
+    }
+
+    #instruccion {
+        font-size: 14px;
+        color: #666;
+    }
+
+    .historial {
+        margin-top: 16px;
+        padding: 12px 16px;
+        border-radius: 10px;
+        background: #ffffff;
+        border: 1px solid rgba(0, 0, 0, 0.06);
+        max-width: 720px;
+    }
+
+    .historial h3 {
+        margin: 0 0 0px;
+        font-size: 15px;
+        color: var(--primary);
+        font-weight: 600;
+    }
+
+    #listaGanancias {
+        font-size: 16px;
+        color: #1d1c1c;
+        font-weight: 700;
+        max-height: 550px;
+        /* o height: 180px; si quieres altura fija */
+        overflow-y: auto;
+        /* aparece scroll solo cuando se llena */
+        padding-right: 4px;
+        /* opcional, para que no tape el texto */
+    }
+</style>
